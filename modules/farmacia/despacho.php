@@ -5,12 +5,14 @@ require_once '../../includes/auth.php';
 require_once '../../config/db.php';
 require_once '../../includes/header.php';
 
-// Obtener recetas pendientes (SOLO de farmacia)
+// Obtener recetas pendientes
 $recetas_pendientes = $pdo->query("
     SELECT r.*, 
            p.nombre as paciente_nombre, 
+           p.curp,
            d.nombre as doctor_nombre,
-           COUNT(rd.id) as total_medicamentos
+           COUNT(rd.id) as total_medicamentos,
+           SUM(CASE WHEN rd.despachado = 1 THEN 1 ELSE 0 END) as despachados
     FROM recetas r
     JOIN pacientes p ON r.paciente_id = p.id
     JOIN doctores d ON r.doctor_id = d.id
@@ -24,12 +26,13 @@ $recetas_pendientes = $pdo->query("
 $receta_id = $_GET['receta'] ?? null;
 $receta_seleccionada = null;
 $detalles_receta = [];
+$edad = '';
 
 if ($receta_id) {
     // Obtener datos de la receta
     $stmt = $pdo->prepare("
-        SELECT r.*, p.nombre as paciente_nombre, p.curp, 
-               p.fecha_nacimiento, d.nombre as doctor_nombre
+        SELECT r.*, p.nombre as paciente_nombre, p.curp, p.fecha_nacimiento,
+               d.nombre as doctor_nombre, d.especialidad
         FROM recetas r
         JOIN pacientes p ON r.paciente_id = p.id
         JOIN doctores d ON r.doctor_id = d.id
@@ -39,17 +42,17 @@ if ($receta_id) {
     $receta_seleccionada = $stmt->fetch();
 
     if ($receta_seleccionada) {
-        // Calcular edad del paciente
-        $edad = '';
+        // Calcular edad
         if ($receta_seleccionada['fecha_nacimiento']) {
             $nacimiento = new DateTime($receta_seleccionada['fecha_nacimiento']);
             $hoy = new DateTime();
             $edad = $nacimiento->diff($hoy)->y;
         }
 
-        // Obtener detalles de la receta con stock disponible en farmacia
+        // Obtener detalles de la receta con stock disponible
         $stmt = $pdo->prepare("
             SELECT rd.*, 
+                   p.id as producto_id,
                    p.nombre as producto_nombre, 
                    p.codigo,
                    cf.control_lote,
@@ -68,31 +71,39 @@ if ($receta_id) {
         $detalles_receta = $stmt->fetchAll();
     }
 }
+
+// Procesar mensajes de sesión
+$success = $_SESSION['success'] ?? '';
+$error = $_SESSION['error'] ?? '';
+unset($_SESSION['success'], $_SESSION['error']);
 ?>
 
 <div class="fade-in">
-    <div class="d-flex justify-between align-center mb-4">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-xl);">
         <div>
             <h1>💊 Despacho de Medicamentos</h1>
-            <p class="text-gray-600">Dispensar medicamentos de recetas médicas</p>
+            <p style="color: var(--gray-600);">Dispensar medicamentos de recetas médicas</p>
         </div>
         <a href="index.php" class="btn btn-outline">
             <span>←</span> Volver
         </a>
     </div>
 
-    <?php if (isset($_GET['success'])): ?>
-        <div class="alert alert-success">✅ Despacho realizado correctamente</div>
+    <?php if ($success): ?>
+        <div class="alert alert-success">✅ <?= htmlspecialchars($success) ?></div>
     <?php endif; ?>
     
-    <?php if (isset($_GET['error'])): ?>
-        <div class="alert alert-danger">❌ <?= htmlspecialchars($_GET['error']) ?></div>
+    <?php if ($error): ?>
+        <div class="alert alert-danger">❌ <?= htmlspecialchars($error) ?></div>
     <?php endif; ?>
 
     <?php if (!$receta_seleccionada): ?>
-        <!-- Listado de recetas pendientes -->
+        <!-- LISTADO DE RECETAS PENDIENTES -->
         <div class="card">
-            <h3>📋 Recetas Pendientes</h3>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-lg);">
+                <h3>📋 Recetas Pendientes</h3>
+                <span class="badge badge-primary">Total: <?= count($recetas_pendientes) ?></span>
+            </div>
             
             <?php if (empty($recetas_pendientes)): ?>
                 <div class="alert alert-info" style="text-align: center; padding: var(--spacing-xl);">
@@ -106,6 +117,7 @@ if ($receta_id) {
                                 <th>Folio</th>
                                 <th>Fecha</th>
                                 <th>Paciente</th>
+                                <th>CURP</th>
                                 <th>Doctor</th>
                                 <th>Medicamentos</th>
                                 <th>Acciones</th>
@@ -117,8 +129,14 @@ if ($receta_id) {
                                     <td><strong>#<?= str_pad($r['id'], 5, '0', STR_PAD_LEFT) ?></strong></td>
                                     <td><?= date('d/m/Y H:i', strtotime($r['fecha'])) ?></td>
                                     <td><?= htmlspecialchars($r['paciente_nombre']) ?></td>
+                                    <td><?= htmlspecialchars($r['curp'] ?? 'N/A') ?></td>
                                     <td><?= htmlspecialchars($r['doctor_nombre']) ?></td>
-                                    <td><?= $r['total_medicamentos'] ?> medicamentos</td>
+                                    <td>
+                                        <?= $r['total_medicamentos'] ?> medicamentos
+                                        <?php if ($r['despachados'] > 0): ?>
+                                            <br><small class="badge badge-info"><?= $r['despachados'] ?> despachados</small>
+                                        <?php endif; ?>
+                                    </td>
                                     <td>
                                         <a href="despacho.php?receta=<?= $r['id'] ?>" 
                                            class="btn btn-sm btn-success">
@@ -133,31 +151,45 @@ if ($receta_id) {
             <?php endif; ?>
         </div>
     <?php else: ?>
-        <!-- Formato de Receta Médica -->
+        <!-- FORMULARIO DE DESPACHO -->
         <div class="receta-card">
-            <div class="receta-header">
-                <div><h3>HOSPITAL GENERAL</h3></div>
-                <div><h3>RECETA MÉDICA</h3></div>
-                <div><h3>FOLIO: #<?= str_pad($receta_seleccionada['id'], 5, '0', STR_PAD_LEFT) ?></h3></div>
-            </div>
-            
-            <!-- Datos del paciente -->
-            <div class="receta-datos-paciente">
+            <!-- Encabezado -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-lg); padding-bottom: var(--spacing-md); border-bottom: 2px solid var(--primary);">
                 <div>
-                    <p><strong>PACIENTE:</strong> <?= htmlspecialchars($receta_seleccionada['paciente_nombre']) ?></p>
-                    <p><strong>CURP:</strong> <?= htmlspecialchars($receta_seleccionada['curp'] ?? 'N/A') ?></p>
+                    <h2 style="color: var(--primary); margin: 0;">RECETA MÉDICA</h2>
+                    <p style="color: var(--gray-600);">Folio: #<?= str_pad($receta_seleccionada['id'], 5, '0', STR_PAD_LEFT) ?></p>
                 </div>
-                <div>
-                    <p><strong>FECHA:</strong> <?= date('d/m/Y', strtotime($receta_seleccionada['fecha'])) ?></p>
-                    <p><strong>EDAD:</strong> <?= $edad ?? 'N/A' ?> años</p>
-                </div>
-                <div>
-                    <p><strong>MÉDICO:</strong> <?= htmlspecialchars($receta_seleccionada['doctor_nombre']) ?></p>
+                <div style="text-align: right;">
+                    <p><strong>Fecha:</strong> <?= date('d/m/Y H:i', strtotime($receta_seleccionada['fecha'])) ?></p>
                 </div>
             </div>
 
-            <!-- Tabla de medicamentos -->
-            <form method="POST" action="procesar_despacho.php">
+            <!-- Datos del paciente -->
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--spacing-md); margin-bottom: var(--spacing-lg); padding: var(--spacing-md); background: var(--gray-100); border-radius: var(--radius-md);">
+                <div>
+                    <strong>Paciente:</strong>
+                    <p><?= htmlspecialchars($receta_seleccionada['paciente_nombre']) ?></p>
+                </div>
+                <div>
+                    <strong>CURP:</strong>
+                    <p><?= htmlspecialchars($receta_seleccionada['curp'] ?? 'N/A') ?></p>
+                </div>
+                <div>
+                    <strong>Edad:</strong>
+                    <p><?= $edad ?: 'N/A' ?> años</p>
+                </div>
+            </div>
+
+            <!-- Datos del médico -->
+            <div style="margin-bottom: var(--spacing-lg);">
+                <strong>Médico:</strong> <?= htmlspecialchars($receta_seleccionada['doctor_nombre']) ?>
+                <?php if ($receta_seleccionada['especialidad']): ?>
+                    <br><small><?= htmlspecialchars($receta_seleccionada['especialidad']) ?></small>
+                <?php endif; ?>
+            </div>
+
+            <!-- Formulario de despacho -->
+            <form method="POST" action="procesar_despacho.php" id="formDespacho">
                 <input type="hidden" name="receta_id" value="<?= $receta_seleccionada['id'] ?>">
                 
                 <div class="table-container">
@@ -165,10 +197,10 @@ if ($receta_id) {
                         <thead>
                             <tr>
                                 <th>Medicamento</th>
-                                <th>Cantidad</th>
-                                <th>Stock</th>
+                                <th>Cant. Solicitada</th>
+                                <th>Stock Total</th>
                                 <th>Lote a despachar</th>
-                                <th>Cantidad a surtir</th>
+                                <th>Cant. a surtir</th>
                                 <th>Despachar</th>
                             </tr>
                         </thead>
@@ -206,7 +238,8 @@ if ($receta_id) {
                                                 <option value="">Seleccionar lote</option>
                                                 <?php foreach ($lotes_disponibles as $lote): ?>
                                                     <option value="<?= $lote['id'] ?>" 
-                                                            data-stock="<?= $lote['cantidad_actual'] ?>">
+                                                            data-stock="<?= $lote['cantidad_actual'] ?>"
+                                                            data-vencimiento="<?= $lote['fecha_vencimiento'] ?>">
                                                         <?= $lote['numero_lote'] ?> 
                                                         (Stock: <?= $lote['cantidad_actual'] ?>)
                                                         <?= $lote['fecha_vencimiento'] ? 'Vence: ' . date('d/m/Y', strtotime($lote['fecha_vencimiento'])) : '' ?>
@@ -215,20 +248,24 @@ if ($receta_id) {
                                             </select>
                                         <?php else: ?>
                                             <span class="badge badge-secondary">Sin control de lote</span>
+                                            <input type="hidden" name="lote[<?= $detalle['id'] ?>]" value="">
                                         <?php endif; ?>
                                     </td>
                                     <td>
                                         <input type="number" name="cantidad_surtida[<?= $detalle['id'] ?>]" 
-                                               class="form-control" 
+                                               class="form-control cantidad-input" 
                                                min="1" 
                                                max="<?= min($detalle['cantidad'], $detalle['stock_total']) ?>"
-                                               value="<?= $detalle['cantidad'] ?>"
-                                               <?= !$stock_suficiente ? 'disabled' : '' ?>>
+                                               value="<?= min($detalle['cantidad'], $detalle['stock_total']) ?>"
+                                               <?= !$stock_suficiente ? 'disabled' : '' ?>
+                                               data-detalle="<?= $detalle['id'] ?>">
                                     </td>
                                     <td class="text-center">
                                         <input type="checkbox" name="despachar[]" 
                                                value="<?= $detalle['id'] ?>"
-                                               <?= $stock_suficiente ? 'checked' : 'disabled' ?>>
+                                               <?= $stock_suficiente ? 'checked' : 'disabled' ?>
+                                               class="despachar-checkbox"
+                                               data-detalle="<?= $detalle['id'] ?>">
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
@@ -244,7 +281,7 @@ if ($receta_id) {
 
                 <!-- Botones -->
                 <div style="display: flex; gap: var(--spacing-md); margin-top: var(--spacing-xl);">
-                    <button type="submit" class="btn btn-success" style="flex: 1;">
+                    <button type="submit" class="btn btn-success" style="flex: 1;" id="btnDespachar">
                         💊 Confirmar Despacho
                     </button>
                     <a href="despacho.php" class="btn btn-outline">Cancelar</a>
@@ -253,5 +290,50 @@ if ($receta_id) {
         </div>
     <?php endif; ?>
 </div>
+
+<script>
+// Validar que al menos un medicamento esté seleccionado para despachar
+document.getElementById('formDespacho')?.addEventListener('submit', function(e) {
+    const checkboxes = document.querySelectorAll('input[name="despachar[]"]:checked');
+    if (checkboxes.length === 0) {
+        e.preventDefault();
+        alert('Debe seleccionar al menos un medicamento para despachar');
+    }
+});
+
+// Validar que la cantidad surtida no exceda el stock del lote seleccionado
+document.querySelectorAll('select[name^="lote"]').forEach(select => {
+    select.addEventListener('change', function() {
+        const row = this.closest('tr');
+        const cantidadInput = row.querySelector('input[type="number"]');
+        const checkbox = row.querySelector('input[type="checkbox"]');
+        const stockLote = this.options[this.selectedIndex]?.dataset.stock || 0;
+        
+        if (cantidadInput && stockLote > 0) {
+            cantidadInput.max = Math.min(cantidadInput.max, stockLote);
+            if (parseInt(cantidadInput.value) > parseInt(stockLote)) {
+                cantidadInput.value = stockLote;
+            }
+        }
+    });
+});
+
+// Actualizar max cuando cambia la cantidad
+document.querySelectorAll('.cantidad-input').forEach(input => {
+    input.addEventListener('change', function() {
+        const row = this.closest('tr');
+        const checkbox = row.querySelector('.despachar-checkbox');
+        const select = row.querySelector('select');
+        
+        if (select) {
+            const stockLote = select.options[select.selectedIndex]?.dataset.stock || 0;
+            if (parseInt(this.value) > parseInt(stockLote)) {
+                alert('La cantidad no puede ser mayor al stock del lote');
+                this.value = stockLote;
+            }
+        }
+    });
+});
+</script>
 
 <?php require_once '../../includes/footer.php'; ?>

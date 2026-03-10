@@ -9,34 +9,43 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-$receta_id = $_POST['receta_id'];
+$receta_id = $_POST['receta_id'] ?? 0;
 $despachar = $_POST['despachar'] ?? [];
 $lotes_seleccionados = $_POST['lote'] ?? [];
 $cantidades_surtidas = $_POST['cantidad_surtida'] ?? [];
 $observaciones = $_POST['observaciones'] ?? '';
 
-if (empty($despachar)) {
-    header("Location: despacho.php?receta=$receta_id&error=Seleccione al menos un medicamento");
+if (empty($receta_id) || empty($despachar)) {
+    $_SESSION['error'] = "Datos incompletos para el despacho";
+    header("Location: despacho.php");
     exit;
 }
 
 try {
     $pdo->beginTransaction();
 
+    // Verificar que la receta existe y está pendiente
+    $stmt = $pdo->prepare("SELECT id, paciente_id FROM recetas WHERE id = ? AND estado = 'pendiente'");
+    $stmt->execute([$receta_id]);
+    if (!$stmt->fetch()) {
+        throw new Exception("Receta no encontrada o ya fue despachada");
+    }
+
     foreach ($despachar as $detalle_id) {
         // Obtener información del detalle
         $stmt = $pdo->prepare("
-            SELECT rd.*, p.id as producto_id, cf.control_lote
+            SELECT rd.*, p.id as producto_id, p.nombre as producto_nombre,
+                   cf.control_lote, cf.control_vencimiento
             FROM receta_detalles rd
             JOIN productos p ON rd.producto_id = p.id
             LEFT JOIN categorias_farmacia cf ON p.categoria_farmacia_id = cf.id
-            WHERE rd.id = ?
+            WHERE rd.id = ? AND rd.despachado = 0
         ");
         $stmt->execute([$detalle_id]);
         $detalle = $stmt->fetch();
 
         if (!$detalle) {
-            throw new Exception("Detalle de receta no encontrado");
+            throw new Exception("Detalle de receta no encontrado o ya despachado");
         }
 
         $cantidad_solicitada = $detalle['cantidad'];
@@ -44,18 +53,21 @@ try {
         $lote_id = $lotes_seleccionados[$detalle_id] ?? null;
 
         if ($cantidad_surtir <= 0 || $cantidad_surtir > $cantidad_solicitada) {
-            throw new Exception("Cantidad no válida para el producto");
+            throw new Exception("Cantidad no válida para el producto {$detalle['producto_nombre']}");
         }
+
+        // Variables para el movimiento
+        $lote_usado = null;
 
         // Si requiere lote, validar y descontar del lote específico
         if ($detalle['control_lote']) {
             if (!$lote_id) {
-                throw new Exception("Debe seleccionar un lote para el producto");
+                throw new Exception("Debe seleccionar un lote para {$detalle['producto_nombre']}");
             }
 
             // Verificar stock en el lote
             $stmt = $pdo->prepare("
-                SELECT cantidad_actual FROM farmacia_lotes
+                SELECT cantidad_actual, numero_lote FROM farmacia_lotes
                 WHERE id = ? AND activo = 1 
                 AND (fecha_vencimiento IS NULL OR fecha_vencimiento > CURDATE())
             ");
@@ -63,7 +75,7 @@ try {
             $lote = $stmt->fetch();
 
             if (!$lote || $lote['cantidad_actual'] < $cantidad_surtir) {
-                throw new Exception("Stock insuficiente en el lote seleccionado");
+                throw new Exception("Stock insuficiente en el lote seleccionado para {$detalle['producto_nombre']}");
             }
 
             // Descontar del lote
@@ -73,10 +85,13 @@ try {
                 WHERE id = ?
             ");
             $stmt->execute([$cantidad_surtir, $lote_id]);
+            
+            $lote_usado = $lote['numero_lote'];
+
         } else {
-            // Si no requiere lote, usar FIFO
+            // Si no requiere lote, usar FIFO (primero en entrar, primero en salir)
             $stmt = $pdo->prepare("
-                SELECT id, cantidad_actual FROM farmacia_lotes
+                SELECT id, cantidad_actual, numero_lote FROM farmacia_lotes
                 WHERE producto_id = ? AND activo = 1 AND cantidad_actual > 0
                 ORDER BY fecha_entrada ASC, fecha_vencimiento ASC
             ");
@@ -84,6 +99,8 @@ try {
             $lotes = $stmt->fetchAll();
 
             $cantidad_pendiente = $cantidad_surtir;
+            $lotes_usados = [];
+
             foreach ($lotes as $l) {
                 if ($cantidad_pendiente <= 0) break;
                 
@@ -94,17 +111,21 @@ try {
                     WHERE id = ?
                 ");
                 $stmt->execute([$descontar, $l['id']]);
+                
                 $cantidad_pendiente -= $descontar;
-                $lote_id = $l['id']; // Último lote usado
+                $lotes_usados[] = $l['numero_lote'] . "($descontar)";
+                $lote_id = $l['id']; // Último lote usado para el movimiento
             }
 
             if ($cantidad_pendiente > 0) {
-                throw new Exception("Stock insuficiente para el producto");
+                throw new Exception("Stock insuficiente para {$detalle['producto_nombre']}");
             }
+
+            $lote_usado = implode(', ', $lotes_usados);
         }
 
         // Registrar movimiento en inventario
-        $motivo = "Despacho de receta #$receta_id";
+        $motivo = "Despacho de receta #$receta_id - Lote: $lote_usado";
         $stmt = $pdo->prepare("
             INSERT INTO movimientos_inventario 
             (departamento, producto_id, lote_id, tipo_movimiento, cantidad, 
@@ -122,8 +143,13 @@ try {
         ]);
 
         // Marcar detalle como despachado
-        $stmt = $pdo->prepare("UPDATE receta_detalles SET despachado = 1 WHERE id = ?");
-        $stmt->execute([$detalle_id]);
+        $stmt = $pdo->prepare("
+            UPDATE receta_detalles 
+            SET despachado = 1, 
+                cantidad_dispensada = ? 
+            WHERE id = ?
+        ");
+        $stmt->execute([$cantidad_surtir, $detalle_id]);
     }
 
     // Verificar si todos los detalles están despachados
@@ -138,17 +164,21 @@ try {
         // Actualizar estado de la receta
         $stmt = $pdo->prepare("UPDATE recetas SET estado = 'despachada' WHERE id = ?");
         $stmt->execute([$receta_id]);
+        $mensaje = "Receta despachada completamente";
+    } else {
+        $mensaje = "Despacho parcial realizado";
     }
 
     $pdo->commit();
     
-    $_SESSION['success'] = "Despacho realizado correctamente";
-    header("Location: despacho.php?success=1");
+    $_SESSION['success'] = "$mensaje correctamente";
+    header("Location: despacho.php");
 
 } catch (Exception $e) {
     $pdo->rollBack();
     error_log("Error en despacho: " . $e->getMessage());
-    header("Location: despacho.php?receta=$receta_id&error=" . urlencode($e->getMessage()));
+    $_SESSION['error'] = "Error al despachar: " . $e->getMessage();
+    header("Location: despacho.php?receta=$receta_id");
 }
 exit;
 ?>

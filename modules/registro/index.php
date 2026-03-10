@@ -70,32 +70,32 @@ $ultimos_pacientes = $pdo->query("
     </div>
 
     <!-- Accesos rápidos -->
-    <h2 style="margin-bottom: var(--spacing-lg);">Accesos Rápidos</h2>
-    <div class="grid-modulos" style="margin-bottom: var(--spacing-xl);">
-        <a href="pacientes.php" class="card-modulo">
-            <div style="font-size: 2.5rem; margin-bottom: var(--spacing-sm);">📋</div>
-            <h3>Lista de Pacientes</h3>
-            <p style="font-size: var(--font-size-sm); opacity: 0.8;">Ver y gestionar todos los pacientes</p>
-        </a>
-        
-        <a href="nuevo_paciente.php" class="card-modulo">
-            <div style="font-size: 2.5rem; margin-bottom: var(--spacing-sm);">➕</div>
-            <h3>Registrar Paciente</h3>
-            <p style="font-size: var(--font-size-sm); opacity: 0.8;">Agregar un nuevo paciente al sistema</p>
-        </a>
-        
-        <a href="buscar_paciente.php" class="card-modulo">
-            <div style="font-size: 2.5rem; margin-bottom: var(--spacing-sm);">🔍</div>
-            <h3>Buscar Paciente</h3>
-            <p style="font-size: var(--font-size-sm); opacity: 0.8;">Búsqueda por nombre o CURP</p>
-        </a>
-        
-        <a href="reportes.php" class="card-modulo">
-            <div style="font-size: 2.5rem; margin-bottom: var(--spacing-sm);">📊</div>
-            <h3>Reportes</h3>
-            <p style="font-size: var(--font-size-sm); opacity: 0.8;">Estadísticas y análisis</p>
-        </a>
-    </div>
+<h2 style="margin-bottom: var(--spacing-lg);">Accesos Rápidos</h2>
+<div class="grid-modulos" style="margin-bottom: var(--spacing-xl);">
+    <a href="pacientes.php" class="card-modulo primary">
+        <div style="font-size: 2.5rem; margin-bottom: var(--spacing-sm);">📋</div>
+        <h3>Lista de Pacientes</h3>
+        <p style="font-size: var(--font-size-sm); opacity: 0.8;">Ver y gestionar todos los pacientes</p>
+    </a>
+    
+    <a href="nuevo_paciente.php" class="card-modulo success">
+        <div style="font-size: 2.5rem; margin-bottom: var(--spacing-sm);">➕</div>
+        <h3>Registrar Paciente</h3>
+        <p style="font-size: var(--font-size-sm); opacity: 0.8;">Agregar un nuevo paciente al sistema</p>
+    </a>
+    
+    <a href="buscar_paciente.php" class="card-modulo info">
+        <div style="font-size: 2.5rem; margin-bottom: var(--spacing-sm);">🔍</div>
+        <h3>Buscar Paciente</h3>
+        <p style="font-size: var(--font-size-sm); opacity: 0.8;">Búsqueda por nombre o CURP</p>
+    </a>
+    
+    <a href="reportes.php" class="card-modulo warning">
+        <div style="font-size: 2.5rem; margin-bottom: var(--spacing-sm);">📊</div>
+        <h3>Reportes</h3>
+        <p style="font-size: var(--font-size-sm); opacity: 0.8;">Estadísticas y análisis</p>
+    </a>
+</div>
 
     <!-- Últimos pacientes registrados -->
     <div class="card">

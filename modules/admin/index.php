@@ -102,28 +102,33 @@ $ultimos_usuarios = $pdo->query("
         </div>
     </div>
 
-    <!-- Accesos rápidos -->
-    <h2 style="margin-bottom: var(--spacing-lg);">⚡ Accesos Rápidos</h2>
-    <div class="grid-modulos" style="margin-bottom: var(--spacing-xl);">
-        <a href="usuarios.php" class="card-modulo">
-            <div style="font-size: 2.5rem; margin-bottom: var(--spacing-sm);">👥</div>
-            <h3>Gestión de Usuarios</h3>
-            <p style="font-size: var(--font-size-sm); opacity: 0.8;">Crear, editar y asignar permisos</p>
-        </a>
-        
-        <a href="usuarios.php?rol=doctor" class="card-modulo">
-            <div style="font-size: 2.5rem; margin-bottom: var(--spacing-sm);">🩺</div>
-            <h3>Doctores</h3>
-            <p style="font-size: var(--font-size-sm); opacity: 0.8;">Gestionar médicos y sus horarios</p>
-        </a>
-        
-        <a href="usuarios.php?rol=admin" class="card-modulo">
-            <div style="font-size: 2.5rem; margin-bottom: var(--spacing-sm);">👑</div>
-            <h3>Administradores</h3>
-            <p style="font-size: var(--font-size-sm); opacity: 0.8;">Usuarios con acceso total</p>
-        </a>
-    </div>
-
+   <!-- Accesos rápidos -->
+<h2 style="margin-bottom: var(--spacing-lg);">Accesos Rápidos</h2>
+<div class="grid-modulos" style="margin-bottom: var(--spacing-xl);">
+    <a href="usuarios.php" class="card-modulo primary">
+        <div style="font-size: 2.5rem; margin-bottom: var(--spacing-sm);">👥</div>
+        <h3>Gestión de Usuarios</h3>
+        <p style="font-size: var(--font-size-sm); opacity: 0.8;">Crear, editar y asignar permisos</p>
+    </a>
+    
+    <a href="usuarios.php?rol=doctor" class="card-modulo success">
+        <div style="font-size: 2.5rem; margin-bottom: var(--spacing-sm);">🩺</div>
+        <h3>Doctores</h3>
+        <p style="font-size: var(--font-size-sm); opacity: 0.8;">Gestionar médicos y sus horarios</p>
+    </a>
+    
+    <a href="usuarios.php?rol=admin" class="card-modulo warning">
+        <div style="font-size: 2.5rem; margin-bottom: var(--spacing-sm);">👑</div>
+        <h3>Administradores</h3>
+        <p style="font-size: var(--font-size-sm); opacity: 0.8;">Usuarios con acceso total</p>
+    </a>
+    
+    <a href="permisos.php" class="card-modulo info">
+        <div style="font-size: 2.5rem; margin-bottom: var(--spacing-sm);">🔐</div>
+        <h3>Permisos</h3>
+        <p style="font-size: var(--font-size-sm); opacity: 0.8;">Gestionar permisos del sistema</p>
+    </a>
+</div>
     <!-- Últimos usuarios registrados -->
     <div class="card">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-lg);">

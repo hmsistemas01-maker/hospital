@@ -5,40 +5,48 @@ require_once '../../includes/auth.php';
 require_once '../../config/db.php';
 require_once '../../includes/header.php';
 
-
-
-// Obtener estadísticas
+// ============================================
+// OBTENER ESTADÍSTICAS
+// ============================================
 $stats = [];
 
 try {
-    // Productos con stock
+    // Total de productos en farmacia con stock
     $stmt = $pdo->query("
         SELECT COUNT(DISTINCT p.id) 
-        FROM productos p
-        INNER JOIN lote l ON p.id = l.producto_id
-        WHERE l.activo = 1 AND l.cantidad_actual > 0
+        FROM productos p 
+        INNER JOIN farmacia_lotes l ON p.id = l.producto_id 
+        WHERE p.departamento = 'farmacia' AND l.activo = 1 AND l.cantidad_actual > 0
     ");
     $stats['productos_con_stock'] = $stmt->fetchColumn() ?: 0;
 
-    // Productos con stock bajo
+    // Productos con stock bajo (menor al mínimo)
     $stmt = $pdo->query("
         SELECT COUNT(*) FROM (
             SELECT p.id, 
-                   COALESCE((SELECT SUM(cantidad_actual) FROM lote WHERE producto_id = p.id AND activo = 1), 0) as stock_total,
+                   COALESCE(SUM(l.cantidad_actual), 0) as stock_total,
                    p.stock_minimo
             FROM productos p
-            WHERE p.activo = 1
-            HAVING stock_total <= p.stock_minimo AND stock_total > 0
+            LEFT JOIN farmacia_lotes l ON p.id = l.producto_id AND l.activo = 1
+            WHERE p.departamento = 'farmacia' AND p.activo = 1
+            GROUP BY p.id
+            HAVING stock_total < p.stock_minimo
         ) as bajos
     ");
     $stats['stock_bajo'] = $stmt->fetchColumn() ?: 0;
 
     // Requisiciones pendientes
-    $stmt = $pdo->query("SELECT COUNT(*) FROM requisiciones WHERE estado = 'pendiente'");
+    $stmt = $pdo->query("
+        SELECT COUNT(*) FROM requisiciones 
+        WHERE departamento = 'farmacia' AND estado = 'pendiente'
+    ");
     $stats['requisiciones_pendientes'] = $stmt->fetchColumn() ?: 0;
 
-    // Recetas pendientes TOTALES (no solo de hoy)
-    $stmt = $pdo->query("SELECT COUNT(*) FROM recetas WHERE estado = 'pendiente'");
+    // ===== NUEVO: RECETAS PENDIENTES =====
+    $stmt = $pdo->query("
+        SELECT COUNT(*) FROM recetas 
+        WHERE estado = 'pendiente'
+    ");
     $stats['recetas_pendientes'] = $stmt->fetchColumn() ?: 0;
 
     // Últimas entradas
@@ -47,31 +55,34 @@ try {
             DATE_FORMAT(m.fecha_movimiento, '%d/%m/%Y') as fecha,
             p.nombre as producto,
             m.cantidad,
-            u.usuario
+            u.nombre as usuario
         FROM movimientos_inventario m
         JOIN productos p ON m.producto_id = p.id
         JOIN usuarios u ON m.usuario_id = u.id
-        WHERE m.tipo_movimiento = 'entrada'
+        WHERE m.departamento = 'farmacia' AND m.tipo_movimiento = 'entrada'
         ORDER BY m.fecha_movimiento DESC
         LIMIT 5
     ")->fetchAll();
 
-    // ===== NUEVO: OBTENER RECETAS PENDIENTES =====
-    $recetas_pendientes = $pdo->query("
-        SELECT r.id, r.fecha, 
-               p.nombre as paciente, 
-               d.nombre as doctor,
-               COUNT(rd.id) as total_medicamentos
+    // ===== NUEVO: RECETAS PENDIENTES PARA EL DASHBOARD =====
+    $recetas_hoy = $pdo->query("
+        SELECT COUNT(*) as total 
+        FROM recetas 
+        WHERE DATE(fecha) = CURDATE() AND estado = 'pendiente'
+    ")->fetchColumn();
+
+    $primeras_recetas = $pdo->query("
+        SELECT r.id, r.fecha, p.nombre as paciente, 
+               COUNT(rd.id) as medicamentos
         FROM recetas r
-        LEFT JOIN pacientes p ON r.id_paciente = p.id
-        LEFT JOIN doctores d ON r.id_doctor = d.id
-        LEFT JOIN receta_detalles rd ON r.id = rd.id_receta
+        JOIN pacientes p ON r.paciente_id = p.id
+        LEFT JOIN receta_detalles rd ON r.id = rd.receta_id
         WHERE r.estado = 'pendiente'
         GROUP BY r.id
         ORDER BY r.fecha ASC
         LIMIT 5
     ")->fetchAll();
-    
+
 } catch (PDOException $e) {
     error_log("Error en farmacia/index.php: " . $e->getMessage());
     $stats = [
@@ -81,125 +92,145 @@ try {
         'recetas_pendientes' => 0
     ];
     $entradas = [];
-    $recetas_pendientes = [];
+    $primeras_recetas = [];
+    $recetas_hoy = 0;
 }
 ?>
 
 <div class="fade-in">
     <h1 class="page-title">💊 Módulo de Farmacia</h1>
 
-    <!-- Stats - 4 cuadros estilo dashboard -->
+    <!-- ============================================ -->
+    <!-- ESTADÍSTICAS - 4 CUADROS -->
+    <!-- ============================================ -->
     <div class="farmacia-stats">
         <div class="farmacia-stat-card primary">
             <div class="farmacia-stat-value"><?= $stats['productos_con_stock'] ?></div>
             <div class="farmacia-stat-label">Productos en Stock</div>
         </div>
+        
         <div class="farmacia-stat-card <?= $stats['stock_bajo'] > 0 ? 'warning' : 'success' ?>">
             <div class="farmacia-stat-value"><?= $stats['stock_bajo'] ?></div>
             <div class="farmacia-stat-label">Stock Bajo</div>
         </div>
+        
         <div class="farmacia-stat-card <?= $stats['requisiciones_pendientes'] > 0 ? 'warning' : 'success' ?>">
             <div class="farmacia-stat-value"><?= $stats['requisiciones_pendientes'] ?></div>
             <div class="farmacia-stat-label">Req. Pendientes</div>
         </div>
+        
         <div class="farmacia-stat-card <?= $stats['recetas_pendientes'] > 0 ? 'info' : 'success' ?>">
             <div class="farmacia-stat-value"><?= $stats['recetas_pendientes'] ?></div>
             <div class="farmacia-stat-label">Recetas Pendientes</div>
         </div>
     </div>
 
-    <!-- Accesos rápidos -->
+    <!-- ============================================ -->
+    <!-- ACCESOS RÁPIDOS - 6 BOTONES -->
+    <!-- ============================================ -->
     <div class="farmacia-grid">
         <a href="productos.php" class="farmacia-grid-item">
             <div class="farmacia-grid-icon">📦</div>
             <div class="farmacia-grid-text">Productos</div>
         </a>
-        
+
         <a href="entrada.php" class="farmacia-grid-item">
             <div class="farmacia-grid-icon">⬇️</div>
             <div class="farmacia-grid-text">Entradas</div>
         </a>
-        
+
         <a href="despacho.php" class="farmacia-grid-item">
             <div class="farmacia-grid-icon">💊</div>
             <div class="farmacia-grid-text">Despacho</div>
         </a>
-        
+
         <a href="lotes.php" class="farmacia-grid-item">
             <div class="farmacia-grid-icon">🏷️</div>
             <div class="farmacia-grid-text">Lotes</div>
         </a>
-        
+
+        <a href="requisiciones.php" class="farmacia-grid-item">
+            <div class="farmacia-grid-icon">📝</div>
+            <div class="farmacia-grid-text">Requisiciones</div>
+        </a>
+
         <a href="reportes.php" class="farmacia-grid-item">
             <div class="farmacia-grid-icon">📊</div>
             <div class="farmacia-grid-text">Reportes</div>
         </a>
     </div>
 
-    <!-- ===== NUEVA SECCIÓN: RECETAS PENDIENTES ===== -->
-    <div class="farmacia-card">
-        <div class="farmacia-card-header">
-            <h3>
-                <span>📋</span> Recetas Pendientes
-            </h3>
-            <a href="despacho.php" class="btn-link">
-                Ver todas <span>→</span>
-            </a>
+    <!-- ============================================ -->
+    <!-- SECCIÓN DE RECETAS PENDIENTES (NUEVO) -->
+    <!-- ============================================ -->
+    <div class="card" style="margin-top: var(--spacing-xl);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-lg);">
+            <h3>📋 Recetas Pendientes</h3>
+            <div>
+                <span class="badge badge-warning" style="margin-right: 10px;">Hoy: <?= $recetas_hoy ?></span>
+                <span class="badge badge-info">Total: <?= $stats['recetas_pendientes'] ?></span>
+            </div>
         </div>
         
-        <?php if (empty($recetas_pendientes)): ?>
-            <div class="farmacia-empty">
-                No hay recetas pendientes
+        <?php if (empty($primeras_recetas)): ?>
+            <div class="alert alert-info" style="text-align: center; padding: var(--spacing-xl);">
+                <p style="font-size: 1.2rem;">📭 No hay recetas pendientes</p>
+                <p style="margin-top: var(--spacing-sm);">Las recetas creadas por los doctores aparecerán aquí automáticamente</p>
             </div>
         <?php else: ?>
-            <div class="recetas-lista">
-                <?php foreach ($recetas_pendientes as $r): ?>
-                <div class="receta-card pendiente">
-                    <div class="receta-header">
-                        <span class="receta-folio">#<?= str_pad($r['id'], 5, '0', STR_PAD_LEFT) ?></span>
-                        <span class="receta-fecha"><?= date('d/m/Y', strtotime($r['fecha'])) ?></span>
-                    </div>
-                    <div class="receta-info">
-                        <div class="receta-info-item">
-                            <span class="receta-info-label">Paciente</span>
-                            <span class="receta-info-value"><?= htmlspecialchars($r['paciente'] ?? 'Sin paciente') ?></span>
-                        </div>
-                        <div class="receta-info-item">
-                            <span class="receta-info-label">Doctor</span>
-                            <span class="receta-info-value"><?= htmlspecialchars($r['doctor'] ?? 'Sin doctor') ?></span>
-                        </div>
-                        <div class="receta-info-item">
-                            <span class="receta-info-label">Medicamentos</span>
-                            <span class="receta-info-value"><?= $r['total_medicamentos'] ?> items</span>
-                        </div>
-                    </div>
-                    <div style="text-align: right;">
-                        <a href="despacho.php?receta=<?= $r['id'] ?>" class="btn btn-sm btn-success">Atender</a>
-                    </div>
-                </div>
-                <?php endforeach; ?>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Folio</th>
+                            <th>Fecha</th>
+                            <th>Paciente</th>
+                            <th>Medicamentos</th>
+                            <th>Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($primeras_recetas as $r): ?>
+                            <tr>
+                                <td><strong>#<?= str_pad($r['id'], 5, '0', STR_PAD_LEFT) ?></strong></td>
+                                <td><?= date('d/m/Y H:i', strtotime($r['fecha'])) ?></td>
+                                <td><?= htmlspecialchars($r['paciente']) ?></td>
+                                <td><?= $r['medicamentos'] ?> medicamentos</td>
+                                <td>
+                                    <a href="despacho.php?receta=<?= $r['id'] ?>" 
+                                       class="btn btn-sm btn-success">
+                                        💊 Despachar
+                                    </a>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
             </div>
+            <?php if ($stats['recetas_pendientes'] > 5): ?>
+                <div style="text-align: right; margin-top: var(--spacing-md);">
+                    <a href="despacho.php">Ver todas las recetas pendientes (<?= $stats['recetas_pendientes'] ?>) →</a>
+                </div>
+            <?php endif; ?>
         <?php endif; ?>
     </div>
 
-    <!-- Últimas entradas -->
-    <div class="farmacia-card">
-        <div class="farmacia-card-header">
-            <h3>
-                <span>📦</span> Últimas Entradas
-            </h3>
-            <a href="entrada.php" class="btn-link">
-                Ver todas <span>→</span>
-            </a>
+    <!-- ============================================ -->
+    <!-- ÚLTIMAS ENTRADAS -->
+    <!-- ============================================ -->
+    <div class="card" style="margin-top: var(--spacing-xl);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-lg);">
+            <h3>📦 Últimas Entradas</h3>
+            <a href="entrada.php" class="btn btn-sm btn-outline">Nueva Entrada</a>
         </div>
-        
+
         <?php if (empty($entradas)): ?>
-            <div class="farmacia-empty">
+            <p class="text-muted" style="text-align: center; padding: var(--spacing-lg);">
                 No hay movimientos recientes
-            </div>
+            </p>
         <?php else: ?>
-            <div class="farmacia-tabla-container">
-                <table class="farmacia-tabla">
+            <div class="table-container">
+                <table>
                     <thead>
                         <tr>
                             <th>Fecha</th>
@@ -210,12 +241,12 @@ try {
                     </thead>
                     <tbody>
                         <?php foreach ($entradas as $e): ?>
-                        <tr>
-                            <td><?= htmlspecialchars($e['fecha']) ?></td>
-                            <td><?= htmlspecialchars($e['producto']) ?></td>
-                            <td><?= $e['cantidad'] ?></td>
-                            <td><?= htmlspecialchars($e['usuario']) ?></td>
-                        </tr>
+                            <tr>
+                                <td><?= htmlspecialchars($e['fecha']) ?></td>
+                                <td><?= htmlspecialchars($e['producto']) ?></td>
+                                <td><?= $e['cantidad'] ?></td>
+                                <td><?= htmlspecialchars($e['usuario']) ?></td>
+                            </tr>
                         <?php endforeach; ?>
                     </tbody>
                 </table>

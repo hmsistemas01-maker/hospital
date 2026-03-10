@@ -29,27 +29,26 @@ require_once 'includes/header.php';
             Cada módulo tiene funciones específicas para su área.
         </p>
         
-        <!-- Accesos rápidos -->
-        <div style="display: flex; gap: var(--spacing-md); justify-content: center; flex-wrap: wrap;">
-            <?php foreach ($modulos as $m): ?>
-                <a href="modules/<?= $m['ruta'] ?>/index.php" class="btn btn-outline" style="display: flex; align-items: center; gap: var(--spacing-sm);">
-                    <?php
-                    $iconos = [
-                        'Administracion' => '👑',
-                        'Almacén' => '📦',
-                        'Citas' => '📅',
-                        'Doctor' => '🩺',
-                        'Farmacia' => '💊',
-                        'Registro Pacientes' => '📋'
-                    ];
-                    echo $iconos[$m['nombre']] ?? '🔷';
-                    ?>
-                    <?= $m['nombre'] ?>
-                </a>
-            <?php endforeach; ?>
-        </div>
-    </div>
-
+       <!-- Accesos rápidos -->
+<div style="display: flex; gap: var(--spacing-md); justify-content: center; flex-wrap: wrap;">
+    <?php foreach ($modulos as $m): ?>
+        <a href="modules/<?= $m['ruta'] ?>/index.php" class="card-modulo" style="width: 200px;">
+            <?php 
+            $iconos = [
+                'Administracion' => '👑',
+                'Almacén' => '📦',
+                'Citas' => '📅',
+                'Doctor' => '🩺',
+                'Farmacia' => '💊',
+                'Registro Pacientes' => '📋'
+            ];
+            echo $iconos[$m['nombre']] ?? '🔷';
+            ?>
+            <div style="font-size: 2.5rem; margin-bottom: var(--spacing-sm);"><?= $iconos[$m['nombre']] ?? '🔷' ?></div>
+            <h3><?= $m['nombre'] ?></h3>
+        </a>
+    <?php endforeach; ?>
+</div>
     <!-- Actividad reciente (igual que antes) -->
     <?php if (usuarioTieneModulo($pdo, $_SESSION['user_id'], 'almacen') || 
               usuarioTieneModulo($pdo, $_SESSION['user_id'], 'citas')): ?>
