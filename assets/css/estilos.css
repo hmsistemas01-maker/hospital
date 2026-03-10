@@ -1,0 +1,526 @@
+/* ============================================
+   VARIABLES GLOBALES Y CONFIGURACIÓN BOOTSTRAP
+   ============================================ */
+:root {
+  /* Paleta de colores original */
+  --primary: #2c6e9c;
+  --primary-dark: #1a4b6d;
+  --primary-light: #4a8bb7;
+  --primary-soft: #e3f0fa;
+  --success: #27ae60;
+  --success-dark: #219a52;
+  --success-light: #d4edda;
+  --danger: #c0392b;
+  --danger-dark: #a83226;
+  --danger-light: #f8d7da;
+  --warning: #f39c12;
+  --warning-light: #fff3cd;
+  --info: #3498db;
+  --info-light: #d1ecf1;
+  --gray-100: #f8f9fa;
+  --gray-200: #e9ecef;
+  --gray-300: #dee2e6;
+  --gray-400: #ced4da;
+  --gray-500: #adb5bd;
+  --gray-600: #6c757d;
+  --gray-700: #495057;
+  --gray-800: #343a40;
+  --gray-900: #212529;
+  --shadow-sm: 0 2px 4px rgba(0,0,0,0.05);
+  --shadow-md: 0 4px 6px rgba(0,0,0,0.1);
+  --shadow-lg: 0 10px 15px rgba(0,0,0,0.1);
+  --shadow-xl: 0 20px 25px rgba(0,0,0,0.15);
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 20px;
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --spacing-xxl: 48px;
+  --font-family: 'Segoe UI', Roboto, system-ui, sans-serif;
+
+  /* Asignar a variables de Bootstrap */
+  --bs-primary: var(--primary);
+  --bs-primary-rgb: 44, 110, 156;
+  --bs-success: var(--success);
+  --bs-success-rgb: 39, 174, 96;
+  --bs-danger: var(--danger);
+  --bs-danger-rgb: 192, 57, 43;
+  --bs-warning: var(--warning);
+  --bs-warning-rgb: 243, 156, 18;
+  --bs-info: var(--info);
+  --bs-info-rgb: 52, 152, 219;
+  --bs-body-bg: var(--gray-100);
+  --bs-body-color: var(--gray-800);
+  --bs-border-radius: var(--radius-md);
+  --bs-border-radius-lg: var(--radius-lg);
+  --bs-border-radius-sm: var(--radius-sm);
+  --bs-box-shadow: var(--shadow-md);
+  --bs-box-shadow-sm: var(--shadow-sm);
+  --bs-box-shadow-lg: var(--shadow-lg);
+}
+
+/* ============================================
+   LAYOUT PRINCIPAL (Sidebar + Contenido)
+   ============================================ */
+body {
+  margin: 0;
+  overflow-x: hidden;
+  background: linear-gradient(135deg, #f5f7fa 0%, #e9eef2 100%);
+}
+
+.app-wrapper {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* Sidebar */
+.sidebar {
+  width: 280px;
+  background: linear-gradient(180deg, var(--primary-dark) 0%, #0a2a4a 100%);
+  color: white;
+  transition: width 0.3s ease;
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 1000;
+  box-shadow: 4px 0 10px rgba(0,0,0,0.1);
+  overflow-y: auto;
+}
+
+.sidebar.collapsed {
+  width: 80px;
+}
+
+.sidebar .sidebar-logo {
+  padding: var(--spacing-lg);
+  text-align: center;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.sidebar.collapsed .sidebar-logo h2 {
+  display: none;
+}
+
+.sidebar .nav-menu {
+  list-style: none;
+  padding: 0;
+  margin: var(--spacing-lg) 0;
+}
+
+.sidebar .nav-link {
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-md) var(--spacing-lg);
+  color: rgba(255,255,255,0.8);
+  text-decoration: none;
+  transition: all 0.2s;
+  border-left: 4px solid transparent;
+  white-space: nowrap;
+}
+
+.sidebar .nav-link:hover,
+.sidebar .nav-link.active {
+  background: rgba(255,255,255,0.1);
+  color: white;
+}
+
+.sidebar .nav-link.active {
+  border-left-color: var(--success);
+}
+
+.sidebar .nav-icon {
+  font-size: 1.5rem;
+  min-width: 40px;
+  text-align: center;
+}
+
+.sidebar.collapsed .nav-text {
+  display: none;
+}
+
+.sidebar.collapsed .nav-link {
+  justify-content: center;
+  padding: var(--spacing-md) 0;
+}
+
+.sidebar.collapsed .nav-icon {
+  min-width: auto;
+}
+
+.user-info-sidebar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: var(--spacing-lg);
+  background: rgba(0,0,0,0.2);
+  border-top: 1px solid rgba(255,255,255,0.1);
+}
+
+.user-info-sidebar .user-name {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  color: white;
+  white-space: nowrap;
+}
+
+.user-info-sidebar .user-avatar {
+  font-size: 2rem;
+}
+
+/* Main content */
+.main-content {
+  flex: 1;
+  margin-left: 280px;
+  transition: margin-left 0.3s ease;
+}
+
+.main-content.expanded {
+  margin-left: 80px;
+}
+
+/* Header del main */
+.main-header {
+  background: white;
+  padding: var(--spacing-md) var(--spacing-xl);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 900;
+}
+
+/* Botones toggle sidebar */
+.sidebar-toggle,
+.sidebar-toggle-mobile {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: var(--gray-700);
+}
+
+.sidebar-toggle-mobile {
+  display: none;
+}
+
+/* Tooltips para sidebar colapsada */
+.sidebar.collapsed .nav-link {
+  position: relative;
+}
+.sidebar.collapsed .nav-link:hover:after {
+  content: attr(title);
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--primary-dark);
+  color: white;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+  z-index: 1000;
+  margin-left: var(--spacing-sm);
+  box-shadow: var(--shadow-md);
+}
+.sidebar.collapsed .nav-link:hover:before {
+  content: '';
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 6px solid transparent;
+  border-right-color: var(--primary-dark);
+  margin-left: -6px;
+}
+
+/* ============================================
+   COMPONENTES PERSONALIZADOS (NO EN BOOTSTRAP)
+   ============================================ */
+
+/* Grid de módulos (cards de acceso) */
+.grid-modulos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--spacing-lg);
+  margin: var(--spacing-xl) 0;
+}
+
+.card-modulo {
+  display: block;
+  background: white;
+  color: var(--gray-800);
+  padding: var(--spacing-xl) var(--spacing-lg);
+  text-align: center;
+  border-radius: var(--radius-lg);
+  font-weight: 600;
+  font-size: var(--font-size-md);
+  text-decoration: none;
+  transition: all var(--transition-normal);
+  border: 1px solid var(--gray-200);
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  overflow: hidden;
+}
+.card-modulo::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--primary), var(--info));
+}
+.card-modulo:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-xl);
+  border-color: var(--primary-light);
+  color: var(--primary-dark);
+}
+.card-modulo[data-icon]::after {
+  content: attr(data-icon);
+  font-size: 2.5rem;
+  display: block;
+  margin-bottom: var(--spacing-md);
+}
+
+/* Estadísticas farmacia (4 cuadros) */
+.farmacia-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--spacing-lg);
+  margin: var(--spacing-xl) 0;
+}
+.farmacia-stat-card {
+  background: white;
+  padding: var(--spacing-xl);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  text-align: center;
+  transition: all var(--transition-normal);
+  border-bottom: 4px solid var(--primary);
+}
+.farmacia-stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+.farmacia-stat-value {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--primary);
+  line-height: 1;
+  margin: var(--spacing-sm) 0;
+}
+.farmacia-stat-label {
+  color: var(--gray-600);
+  font-size: var(--font-size-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Grid accesos rápidos farmacia (6 botones) */
+.farmacia-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: var(--spacing-md);
+  margin: var(--spacing-xl) 0;
+}
+.farmacia-grid-item {
+  display: block;
+  background: white;
+  padding: var(--spacing-lg);
+  text-align: center;
+  border-radius: var(--radius-lg);
+  text-decoration: none;
+  color: var(--gray-800);
+  box-shadow: var(--shadow-sm);
+  transition: all var(--transition-normal);
+  border: 1px solid var(--gray-200);
+}
+.farmacia-grid-item:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+  color: var(--primary);
+  border-color: var(--primary);
+}
+.farmacia-grid-icon {
+  font-size: 2rem;
+  margin-bottom: var(--spacing-sm);
+}
+.farmacia-grid-text {
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+}
+
+/* Tarjeta de receta */
+.receta-card {
+  background: white;
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: var(--spacing-md);
+  border-left: 4px solid var(--warning);
+  transition: all var(--transition-normal);
+}
+.receta-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateX(4px);
+}
+.receta-card.pendiente { border-left-color: var(--warning); }
+.receta-card.despachada { border-left-color: var(--success); opacity: 0.8; }
+.receta-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-md);
+  padding-bottom: var(--spacing-sm);
+  border-bottom: 1px solid var(--gray-200);
+}
+.receta-folio {
+  font-size: var(--font-size-xl);
+  font-weight: bold;
+  color: var(--primary);
+}
+.receta-fecha { color: var(--gray-600); font-size: var(--font-size-sm); }
+.receta-info {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+.receta-info-item { display: flex; flex-direction: column; }
+.receta-info-label {
+  font-size: var(--font-size-xs);
+  color: var(--gray-600);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.receta-info-value { font-size: var(--font-size-md); font-weight: 600; }
+
+/* Items de stock en farmacia */
+.stock-farmacia {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-lg);
+}
+.stock-item {
+  background: white;
+  border-radius: var(--radius-md);
+  padding: var(--spacing-lg);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.2s ease;
+  border-left: 4px solid transparent;
+}
+.stock-item.normal { border-left-color: var(--success); background: linear-gradient(to right, white, #f0fff4); }
+.stock-item.bajo { border-left-color: var(--warning); background: linear-gradient(to right, white, #fff3e0); }
+.stock-item.critico { border-left-color: var(--danger); background: linear-gradient(to right, white, #ffebee); }
+.stock-item:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+.stock-info h4 {
+  margin: 0 0 var(--spacing-xs) 0;
+  color: var(--gray-800);
+  font-size: 1.1rem;
+}
+.stock-info small { color: var(--gray-600); font-size: 0.85rem; }
+.stock-cantidad {
+  font-size: 2.5rem;
+  font-weight: bold;
+  min-width: 80px;
+  text-align: center;
+  line-height: 1;
+}
+.stock-cantidad.normal { color: var(--success); }
+.stock-cantidad.bajo { color: var(--warning); }
+.stock-cantidad.critico { color: var(--danger); }
+
+/* Lector de código de barras */
+.lector-container {
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: white;
+  padding: var(--spacing-xl);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--spacing-xl);
+  text-align: center;
+  box-shadow: var(--shadow-lg);
+}
+.lector-input {
+  width: 100%;
+  max-width: 500px;
+  margin: var(--spacing-md) auto;
+  padding: var(--spacing-md);
+  font-size: 1.2rem;
+  border: 3px solid white;
+  border-radius: var(--radius-lg);
+  background: white;
+}
+.lector-icon {
+  font-size: 4rem;
+  margin-bottom: var(--spacing-sm);
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.slide-up { animation: slideUp 0.4s ease; }
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* ============================================
+   RESPONSIVE (solo para elementos personalizados)
+   ============================================ */
+@media (max-width: 768px) {
+  .sidebar {
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+  }
+  .sidebar.mobile-open {
+    transform: translateX(0);
+  }
+  .main-content {
+    margin-left: 0 !important;
+  }
+  .sidebar-toggle-mobile {
+    display: block;
+  }
+  .farmacia-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .farmacia-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .stock-farmacia {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .farmacia-stats {
+    grid-template-columns: 1fr;
+  }
+  .farmacia-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

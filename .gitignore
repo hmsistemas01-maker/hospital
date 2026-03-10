@@ -1,0 +1,51 @@
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Archivos de configuración local (NO subir credenciales)
+config/config.php
+config/db.php
+*.local.php
+.env
+
+# Archivos de log
+*.log
+error_log/
+
+# Archivos temporales
+*.tmp
+*.temp
+.cache/
+
+# Archivos de IDE/editor
+.vscode/
+.sublime-*
+*.swo
+*.swp
+*~
+
+# Archivos de caché de PHP
+cache/
+tmp/
+
+# No subir archivos de subida de usuarios (si los hay)
+uploads/
+uploads/*
+
+# Archivos de base de datos locales
+*.sql
+*.sqlite
+*.db
+
+# Archivos de compresión
+*.zip
+*.rar
+*.tar.gz
+
+# ¡IMPORTANTE! Archivos sensibles
+**/config.php
+**/db.php
+*.key
+*.pem
+*.crt
