@@ -10,7 +10,11 @@ $rol_filtro = $_GET['rol'] ?? '';
 $busqueda = $_GET['buscar'] ?? '';
 
 // Construir consulta
-$sql = "SELECT u.* FROM usuarios u WHERE 1=1";
+$sql = "SELECT u.*, 
+               (SELECT COUNT(*) FROM doctor_horarios WHERE usuario_id = u.id) as total_horarios,
+               (SELECT COUNT(*) FROM doctor_excepciones WHERE usuario_id = u.id) as total_excepciones
+        FROM usuarios u 
+        WHERE 1=1";
 $params = [];
 
 if (!empty($rol_filtro)) {
@@ -25,16 +29,15 @@ if (!empty($busqueda)) {
 }
 
 $sql .= " ORDER BY u.nombre ASC";
-
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $usuarios = $stmt->fetchAll();
 
 // Contar por rol para los filtros
 $conteo_roles = $pdo->query("
-    SELECT rol, COUNT(*) as total 
-    FROM usuarios 
-    WHERE rol IS NOT NULL AND rol != '' 
+    SELECT rol, COUNT(*) as total
+    FROM usuarios
+    WHERE rol IS NOT NULL AND rol != ''
     GROUP BY rol
 ")->fetchAll();
 
@@ -42,34 +45,48 @@ $conteo = ['todos' => count($usuarios)];
 foreach ($conteo_roles as $c) {
     $conteo[$c['rol']] = $c['total'];
 }
+
+// Mensajes de sesión
+$success = $_SESSION['success'] ?? '';
+$error = $_SESSION['error'] ?? '';
+unset($_SESSION['success'], $_SESSION['error']);
 ?>
 
 <div class="fade-in">
+    <!-- Header -->
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-xl);">
         <div>
             <h1>👥 Gestión de Usuarios</h1>
-            <p style="color: var(--gray-600);">Administra los usuarios del sistema y sus roles</p>
+            <p style="color: var(--gray-600);">Total: <strong><?= $conteo['todos'] ?></strong> usuarios</p>
         </div>
         <a href="usuario_nuevo.php" class="btn btn-success">
             <span>➕</span> Nuevo Usuario
         </a>
     </div>
 
-    <!-- Filtros rápidos por rol -->
+    <?php if ($success): ?>
+        <div class="alert alert-success">✅ <?= htmlspecialchars($success) ?></div>
+    <?php endif; ?>
+    
+    <?php if ($error): ?>
+        <div class="alert alert-danger">❌ <?= htmlspecialchars($error) ?></div>
+    <?php endif; ?>
+
+    <!-- Filtros por rol -->
     <div style="display: flex; gap: var(--spacing-sm); margin-bottom: var(--spacing-lg); flex-wrap: wrap;">
         <a href="usuarios.php" class="btn <?= !$rol_filtro ? 'btn-primary' : 'btn-outline' ?>">
             Todos (<?= $conteo['todos'] ?>)
         </a>
-        <a href="usuarios.php?rol=admin" class="btn <?= $rol_filtro == 'admin' ? 'btn-primary' : 'btn-outline' ?>">
+        <a href="?rol=admin" class="btn <?= $rol_filtro == 'admin' ? 'btn-primary' : 'btn-outline' ?>">
             👑 Admin (<?= $conteo['admin'] ?? 0 ?>)
         </a>
-        <a href="usuarios.php?rol=doctor" class="btn <?= $rol_filtro == 'doctor' ? 'btn-primary' : 'btn-outline' ?>">
+        <a href="?rol=doctor" class="btn <?= $rol_filtro == 'doctor' ? 'btn-primary' : 'btn-outline' ?>">
             🩺 Doctores (<?= $conteo['doctor'] ?? 0 ?>)
         </a>
-        <a href="usuarios.php?rol=farmacia" class="btn <?= $rol_filtro == 'farmacia' ? 'btn-primary' : 'btn-outline' ?>">
+        <a href="?rol=farmacia" class="btn <?= $rol_filtro == 'farmacia' ? 'btn-primary' : 'btn-outline' ?>">
             💊 Farmacia (<?= $conteo['farmacia'] ?? 0 ?>)
         </a>
-        <a href="usuarios.php?rol=registro" class="btn <?= $rol_filtro == 'registro' ? 'btn-primary' : 'btn-outline' ?>">
+        <a href="?rol=registro" class="btn <?= $rol_filtro == 'registro' ? 'btn-primary' : 'btn-outline' ?>">
             📋 Registro (<?= $conteo['registro'] ?? 0 ?>)
         </a>
     </div>
@@ -108,90 +125,108 @@ foreach ($conteo_roles as $c) {
                         <th>Usuario</th>
                         <th>Rol</th>
                         <th>Módulos</th>
+                        <th>Horarios</th>
                         <th>Estado</th>
                         <th>Acciones</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <?php foreach ($usuarios as $u): 
-                        // Obtener módulos del usuario
-                        $stmt = $pdo->prepare("
-                            SELECT m.nombre FROM usuario_modulos um
-                            JOIN modulos m ON um.modulo_id = m.id
-                            WHERE um.usuario_id = ?
-                        ");
-                        $stmt->execute([$u['id']]);
-                        $modulos = $stmt->fetchAll(PDO::FETCH_COLUMN);
-                        
-                        // Si es doctor, obtener su ID de la tabla doctores
-                        $doctor_id = null;
-                        if ($u['rol'] == 'doctor') {
-                            $stmt2 = $pdo->prepare("SELECT id FROM doctores WHERE nombre LIKE ?");
-                            $stmt2->execute(["%{$u['nombre']}%"]);
-                            $doctor = $stmt2->fetch();
-                            $doctor_id = $doctor ? $doctor['id'] : null;
-                        }
-                    ?>
-                    <tr>
-                        <td>#<?= $u['id'] ?></td>
-                        <td><strong><?= htmlspecialchars($u['nombre'] ?: 'Sin nombre') ?></strong></td>
-                        <td><?= htmlspecialchars($u['usuario']) ?></td>
-                        <td>
-                            <?php
-                            $rol_icono = '';
-                            switch($u['rol']) {
-                                case 'admin': $rol_icono = '👑'; break;
-                                case 'doctor': $rol_icono = '🩺'; break;
-                                case 'farmacia': $rol_icono = '💊'; break;
-                                case 'registro': $rol_icono = '📋'; break;
-                                default: $rol_icono = '👤';
-                            }
-                            ?>
-                            <span class="badge badge-primary"><?= $rol_icono ?> <?= ucfirst($u['rol'] ?: 'Usuario') ?></span>
-                        </td>
-                        <td>
-                            <?php foreach ($modulos as $m): ?>
-                                <span class="badge badge-secondary"><?= $m ?></span>
-                            <?php endforeach; ?>
-                        </td>
-                        <td>
-                            <?php if ($u['activo']): ?>
-                                <span class="badge badge-success">Activo</span>
-                            <?php else: ?>
-                                <span class="badge badge-danger">Inactivo</span>
-                            <?php endif; ?>
-                        </td>
-                        <td>
-                            <div style="display: flex; gap: var(--spacing-xs);">
-                                <a href="editar_usuario.php?id=<?= $u['id'] ?>" class="btn btn-sm btn-outline" title="Editar">
-                                    ✏️
-                                </a>
-                                
-                                <?php if ($u['rol'] == 'doctor' && $doctor_id): ?>
-                                    <a href="horarios.php?doctor_id=<?= $doctor_id ?>" class="btn btn-sm btn-outline" title="Horarios">
+                    <?php foreach ($usuarios as $u): ?>
+                        <tr>
+                            <td>#<?= $u['id'] ?></td>
+                            <td><strong><?= htmlspecialchars($u['nombre'] ?? 'Sin nombre') ?></strong></td>
+                            <td><?= htmlspecialchars($u['usuario']) ?></td>
+                            <td>
+                                <?php
+                                $rol_icono = '';
+                                switch($u['rol']) {
+                                    case 'admin': $rol_icono = '👑'; break;
+                                    case 'doctor': $rol_icono = '🩺'; break;
+                                    case 'farmacia': $rol_icono = '💊'; break;
+                                    case 'registro': $rol_icono = '📋'; break;
+                                    default: $rol_icono = '👤';
+                                }
+                                ?>
+                                <span class="badge badge-primary"><?= $rol_icono ?> <?= ucfirst($u['rol'] ?: 'Usuario') ?></span>
+                            </td>
+                            <td>
+                                <?php
+                                // Obtener módulos del usuario
+                                $stmt_mod = $pdo->prepare("SELECT m.nombre FROM usuario_modulos um JOIN modulos m ON um.modulo_id = m.id WHERE um.usuario_id = ?");
+                                $stmt_mod->execute([$u['id']]);
+                                $modulos_user = $stmt_mod->fetchAll();
+                                $total_mod = count($modulos_user);
+                                ?>
+                                <span class="badge badge-info"><?= $total_mod ?> módulos</span>
+                                <?php if ($total_mod > 0): ?>
+                                    <br><small><?= implode(', ', array_column($modulos_user, 'nombre')) ?></small>
+                                <?php endif; ?>
+                            </td>
+                            <td>
+                                <?php if ($u['total_horarios'] > 0): ?>
+                                    <span class="badge badge-success"><?= $u['total_horarios'] ?> horarios</span>
+                                    <?php if ($u['total_excepciones'] > 0): ?>
+                                        <br><small class="badge badge-warning"><?= $u['total_excepciones'] ?> exc.</small>
+                                    <?php endif; ?>
+                                <?php else: ?>
+                                    <span class="badge badge-secondary">Sin horarios</span>
+                                <?php endif; ?>
+                            </td>
+                            <td>
+                                <?php if ($u['activo']): ?>
+                                    <span class="badge badge-success">Activo</span>
+                                <?php else: ?>
+                                    <span class="badge badge-danger">Inactivo</span>
+                                <?php endif; ?>
+                            </td>
+                            <td>
+                                <div style="display: flex; gap: var(--spacing-xs); flex-wrap: wrap;">
+                                    <!-- Botón de horarios -->
+                                    <a href="horarios.php?usuario_id=<?= $u['id'] ?>" 
+                                       class="btn btn-sm btn-outline" 
+                                       title="Gestionar horarios"
+                                       style="border-color: var(--info); color: var(--info);">
                                         ⏰
                                     </a>
-                                <?php endif; ?>
-                                
-                                <?php if ($u['id'] != $_SESSION['user_id']): ?>
-                                    <?php if ($u['activo']): ?>
-                                        <a href="desactivar_usuario.php?id=<?= $u['id'] ?>" 
+                                    
+                                    <!-- Botón de editar -->
+                                    <a href="editar_usuario.php?id=<?= $u['id'] ?>" 
+                                       class="btn btn-sm btn-outline" 
+                                       title="Editar usuario">
+                                        ✏️
+                                    </a>
+                                    
+                                    <!-- Botones de activar/desactivar -->
+                                    <?php if ($u['id'] != $_SESSION['user_id']): ?>
+                                        <?php if ($u['activo']): ?>
+                                            <a href="desactivar_usuario.php?id=<?= $u['id'] ?>" 
+                                               class="btn btn-sm btn-outline" 
+                                               style="border-color: var(--warning); color: var(--warning);"
+                                               onclick="return confirm('¿Desactivar este usuario?')"
+                                               title="Desactivar">
+                                                ⭕
+                                            </a>
+                                        <?php else: ?>
+                                            <a href="activar_usuario.php?id=<?= $u['id'] ?>" 
+                                               class="btn btn-sm btn-outline" 
+                                               style="border-color: var(--success); color: var(--success);"
+                                               title="Activar">
+                                                ✅
+                                            </a>
+                                        <?php endif; ?>
+                                        
+                                        <!-- Botón de eliminar (borrado físico) -->
+                                        <a href="eliminar_usuario.php?id=<?= $u['id'] ?>" 
                                            class="btn btn-sm btn-outline" 
-                                           style="border-color: var(--warning); color: var(--warning);"
-                                           onclick="return confirm('¿Desactivar este usuario?')">
-                                            ⭕
-                                        </a>
-                                    <?php else: ?>
-                                        <a href="activar_usuario.php?id=<?= $u['id'] ?>" 
-                                           class="btn btn-sm btn-outline"
-                                           style="border-color: var(--success); color: var(--success);">
-                                            ✅
+                                           style="border-color: var(--danger); color: var(--danger);"
+                                           onclick="return confirm('¿ESTÁS SEGURO? Esto eliminará permanentemente el usuario y todos sus datos relacionados. Esta acción NO SE PUEDE DESHACER.')"
+                                           title="Eliminar permanentemente">
+                                            🗑️
                                         </a>
                                     <?php endif; ?>
-                                <?php endif; ?>
-                            </div>
-                        </td>
-                    </tr>
+                                </div>
+                            </td>
+                        </tr>
                     <?php endforeach; ?>
                 </tbody>
             </table>

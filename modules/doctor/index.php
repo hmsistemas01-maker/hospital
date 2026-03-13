@@ -4,50 +4,70 @@ $modulo_requerido = 'doctor';
 require_once '../../includes/auth.php';
 require_once '../../config/db.php';
 
+// ========== ELIMINAR REGISTROS CON ID 0 ==========
+$pdo->exec("DELETE FROM doctores WHERE id = 0");
+$pdo->exec("DELETE FROM doctor_horarios WHERE doctor_id = 0");
+$pdo->exec("DELETE FROM doctor_excepciones WHERE doctor_id = 0");
+
 // ========== OBTENER DATOS DEL DOCTOR ==========
 $doctor_id = null;
 $nombre_usuario = $_SESSION['usuario'];
+$doctor = null;
 
-// Buscar el doctor por nombre
-$stmt = $pdo->prepare("SELECT id, nombre FROM doctores WHERE nombre LIKE ? AND activo = 1");
-$stmt->execute(["%$nombre_usuario%"]);
+// Buscar el doctor por nombre (evitando ID 0)
+$stmt = $pdo->prepare("SELECT id, nombre, especialidad FROM doctores WHERE nombre = ? AND activo = 1");
+$stmt->execute([$nombre_usuario]);
 $doctor = $stmt->fetch();
 
 if ($doctor) {
     $doctor_id = $doctor['id'];
 } else {
-    // Si no encuentra, intentar por relación con usuarios
+    // Buscar por relación con usuarios
     $stmt = $pdo->prepare("
-        SELECT d.id, d.nombre
+        SELECT d.id, d.nombre, d.especialidad
         FROM doctores d
-        JOIN usuarios u ON u.nombre LIKE CONCAT('%', d.nombre, '%')
+        INNER JOIN usuarios u ON u.nombre = d.nombre
         WHERE u.id = ? AND d.activo = 1
     ");
     $stmt->execute([$_SESSION['user_id']]);
     $doctor = $stmt->fetch();
+    
     if ($doctor) {
         $doctor_id = $doctor['id'];
     }
 }
 
-// Si aún no se encuentra, crear registro automático
+// Si aún no se encuentra y el usuario tiene rol 'doctor', CREAR UNO NUEVO
 if (!$doctor_id) {
     $stmt = $pdo->prepare("SELECT nombre, rol FROM usuarios WHERE id = ?");
     $stmt->execute([$_SESSION['user_id']]);
     $usuario_info = $stmt->fetch();
     
     if ($usuario_info && $usuario_info['rol'] == 'doctor') {
-        $stmt = $pdo->prepare("
-            INSERT INTO doctores (nombre, especialidad, activo, fecha_registro)
-            VALUES (?, 'General', 1, NOW())
-        ");
+        // Verificar si ya existe un doctor con ese nombre
+        $stmt = $pdo->prepare("SELECT id FROM doctores WHERE nombre = ?");
         $stmt->execute([$usuario_info['nombre']]);
-        $doctor_id = $pdo->lastInsertId();
+        $existe = $stmt->fetch();
         
-        // Obtener el doctor recién creado
-        $stmt = $pdo->prepare("SELECT * FROM doctores WHERE id = ?");
-        $stmt->execute([$doctor_id]);
-        $doctor = $stmt->fetch();
+        if ($existe) {
+            $doctor_id = $existe['id'];
+            $stmt = $pdo->prepare("SELECT id, nombre, especialidad FROM doctores WHERE id = ?");
+            $stmt->execute([$doctor_id]);
+            $doctor = $stmt->fetch();
+        } else {
+            // Crear nuevo doctor SIN especificar el ID
+            $stmt = $pdo->prepare("
+                INSERT INTO doctores (nombre, especialidad, activo, fecha_registro)
+                VALUES (?, 'General', 1, NOW())
+            ");
+            $stmt->execute([$usuario_info['nombre']]);
+            $doctor_id = $pdo->lastInsertId();
+            
+            // Obtener el doctor recién creado
+            $stmt = $pdo->prepare("SELECT id, nombre, especialidad FROM doctores WHERE id = ?");
+            $stmt->execute([$doctor_id]);
+            $doctor = $stmt->fetch();
+        }
     }
 }
 
@@ -160,7 +180,9 @@ require_once '../../includes/header.php';
 
     <?php if (!$doctor_id): ?>
         <div class="alert alert-danger">
-            <strong>Error:</strong> No se pudo identificar su perfil de doctor. Contacte al administrador.
+            <strong>Error:</strong> No se pudo identificar su perfil de doctor. 
+            <br><small>Usuario: <?= htmlspecialchars($_SESSION['usuario']) ?>, ID: <?= $_SESSION['user_id'] ?></small>
+            <br><small>Contacte al administrador para asignarle un perfil de doctor.</small>
         </div>
     <?php endif; ?>
 
@@ -228,24 +250,6 @@ require_once '../../includes/header.php';
             </div>
             <?php endforeach; ?>
         </div>
-        
-        <?php 
-        // Contar total de excepciones
-        $stmt_total = $pdo->prepare("
-            SELECT COUNT(*) FROM doctor_excepciones 
-            WHERE doctor_id = ? AND fecha_inicio >= CURDATE() AND activo = 1
-        ");
-        $stmt_total->execute([$doctor_id]);
-        $total_excepciones = $stmt_total->fetchColumn();
-        
-        if ($total_excepciones > 5): 
-        ?>
-        <div style="text-align: right; margin-top: var(--spacing-md);">
-            <a href="../admin/horarios.php?doctor_id=<?= $doctor_id ?>&action=excepciones" class="btn btn-sm btn-outline">
-                Ver todas las excepciones (<?= $total_excepciones ?>) →
-            </a>
-        </div>
-        <?php endif; ?>
     </div>
     <?php endif; ?>
 

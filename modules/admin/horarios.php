@@ -4,75 +4,126 @@ $modulo_requerido = 'admin';
 require_once '../../includes/auth.php';
 require_once '../../config/db.php';
 
-// ========== VALIDACIONES PRIMERO ==========
-$doctor_id = (int)($_GET['doctor_id'] ?? 0);
+// ========== VALIDACIONES ==========
+$usuario_id = isset($_GET['usuario_id']) ? (int)$_GET['usuario_id'] : 0;
+$doctor_id = isset($_GET['doctor_id']) ? (int)$_GET['doctor_id'] : 0;
 $action = $_GET['action'] ?? 'ver';
 
-if (!$doctor_id) {
-    $_SESSION['error'] = "ID de doctor no válido";
-    header("Location: usuarios.php?rol=doctor");
+// Determinar si es doctor o usuario general
+$es_doctor = ($doctor_id > 0);
+$id_referencia = $es_doctor ? $doctor_id : $usuario_id;
+$tipo_referencia = $es_doctor ? 'doctor_id' : 'usuario_id';
+
+if (!$id_referencia) {
+    $_SESSION['error'] = "ID no válido";
+    header("Location: usuarios.php");
     exit;
 }
 
-// Obtener datos del doctor
-$stmt = $pdo->prepare("SELECT * FROM doctores WHERE id = ?");
-$stmt->execute([$doctor_id]);
-$doctor = $stmt->fetch();
+// Obtener información de la persona
+if ($es_doctor) {
+    // Es un doctor - obtener de tabla doctores
+    $stmt = $pdo->prepare("
+        SELECT d.*, u.nombre as usuario_nombre, u.rol 
+        FROM doctores d 
+        LEFT JOIN usuarios u ON u.nombre = d.nombre 
+        WHERE d.id = ?
+    ");
+    $stmt->execute([$doctor_id]);
+    $persona = $stmt->fetch();
+    $titulo = "Doctor: " . ($persona['nombre'] ?? '');
+    $nombre_persona = $persona['nombre'] ?? '';
+    $rol_persona = 'doctor';
+} else {
+    // Es un usuario común - obtener de tabla usuarios
+    $stmt = $pdo->prepare("SELECT id, nombre, usuario, rol FROM usuarios WHERE id = ?");
+    $stmt->execute([$usuario_id]);
+    $persona = $stmt->fetch();
+    $titulo = "Usuario: " . ($persona['nombre'] ?? '') . " (" . ($persona['rol'] ?? '') . ")";
+    $nombre_persona = $persona['nombre'] ?? '';
+    $rol_persona = $persona['rol'] ?? '';
+}
 
-if (!$doctor) {
-    $_SESSION['error'] = "Doctor no encontrado";
-    header("Location: usuarios.php?rol=doctor");
+if (!$persona) {
+    $_SESSION['error'] = "Registro no encontrado";
+    header("Location: usuarios.php");
     exit;
 }
 
-// Obtener horarios actuales
-$stmt = $pdo->prepare("
-    SELECT * FROM doctor_horarios 
-    WHERE doctor_id = ? 
-    ORDER BY FIELD(dia, 'Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado')
-");
-$stmt->execute([$doctor_id]);
+// Obtener horarios (ahora puede ser por doctor_id o usuario_id)
+if ($es_doctor) {
+    $stmt = $pdo->prepare("
+        SELECT * FROM doctor_horarios 
+        WHERE doctor_id = ? OR usuario_id = ?
+        ORDER BY FIELD(dia, 'Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado', 'Domingo')
+    ");
+    $stmt->execute([$doctor_id, $doctor_id]);
+} else {
+    $stmt = $pdo->prepare("
+        SELECT * FROM doctor_horarios 
+        WHERE usuario_id = ?
+        ORDER BY FIELD(dia, 'Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado', 'Domingo')
+    ");
+    $stmt->execute([$usuario_id]);
+}
 $horarios = $stmt->fetchAll();
 
 // Obtener excepciones
-$stmt = $pdo->prepare("
-    SELECT * FROM doctor_excepciones 
-    WHERE doctor_id = ? 
-    ORDER BY 
-        CASE 
-            WHEN fecha_inicio >= CURDATE() AND activo = 1 THEN 1
-            WHEN fecha_inicio < CURDATE() AND fecha_fin >= CURDATE() AND activo = 1 THEN 2
-            ELSE 3
-        END,
-        fecha_inicio DESC
-");
-$stmt->execute([$doctor_id]);
+if ($es_doctor) {
+    $stmt = $pdo->prepare("
+        SELECT * FROM doctor_excepciones 
+        WHERE doctor_id = ? OR usuario_id = ?
+        ORDER BY 
+            CASE 
+                WHEN fecha_inicio >= CURDATE() AND activo = 1 THEN 1
+                WHEN fecha_inicio < CURDATE() AND fecha_fin >= CURDATE() AND activo = 1 THEN 2
+                ELSE 3
+            END,
+            fecha_inicio DESC
+    ");
+    $stmt->execute([$doctor_id, $doctor_id]);
+} else {
+    $stmt = $pdo->prepare("
+        SELECT * FROM doctor_excepciones 
+        WHERE usuario_id = ?
+        ORDER BY 
+            CASE 
+                WHEN fecha_inicio >= CURDATE() AND activo = 1 THEN 1
+                WHEN fecha_inicio < CURDATE() AND fecha_fin >= CURDATE() AND activo = 1 THEN 2
+                ELSE 3
+            END,
+            fecha_inicio DESC
+    ");
+    $stmt->execute([$usuario_id]);
+}
 $excepciones = $stmt->fetchAll();
 
-$dias_semana = ['Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'];
+$dias_semana = ['Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado', 'Domingo'];
 
-// Mensajes de sesión
 $success = $_SESSION['success'] ?? '';
 $error = $_SESSION['error'] ?? '';
 unset($_SESSION['success'], $_SESSION['error']);
 
-// ========== AHORA INCLUIMOS EL HEADER ==========
 require_once '../../includes/header.php';
 ?>
 
 <div class="fade-in">
-    <!-- Header con tabs -->
+    <!-- Header -->
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-xl);">
         <div>
             <h1>📅 Gestión de Horarios</h1>
             <p style="color: var(--gray-600);">
-                <strong><?= htmlspecialchars($doctor['nombre']) ?></strong> 
-                (<?= htmlspecialchars($doctor['especialidad'] ?? 'Sin especialidad') ?>)
+                <strong><?= htmlspecialchars($nombre_persona) ?></strong>
+                <?php if ($es_doctor): ?>
+                    (<?= htmlspecialchars($persona['especialidad'] ?? 'Doctor') ?>)
+                <?php else: ?>
+                    (<?= htmlspecialchars($persona['rol'] ?? 'Usuario') ?>)
+                <?php endif; ?>
             </p>
         </div>
         <div style="display: flex; gap: var(--spacing-sm);">
-            <a href="usuarios.php?rol=doctor" class="btn btn-outline">
-                <span>←</span> Volver a Doctores
+            <a href="usuarios.php" class="btn btn-outline">
+                <span>←</span> Volver a Usuarios
             </a>
         </div>
     </div>
@@ -87,15 +138,15 @@ require_once '../../includes/header.php';
 
     <!-- Tabs de navegación -->
     <div style="display: flex; gap: var(--spacing-sm); margin-bottom: var(--spacing-lg); border-bottom: 2px solid var(--gray-200);">
-        <a href="?doctor_id=<?= $doctor_id ?>&action=ver" 
+        <a href="?<?= $tipo_referencia ?>=<?= $id_referencia ?>&action=ver" 
            class="btn <?= $action == 'ver' ? 'btn-primary' : 'btn-outline' ?>" 
            style="border-radius: 0; border-bottom: none;">
             📋 Horarios Regulares
         </a>
-        <a href="?doctor_id=<?= $doctor_id ?>&action=excepciones" 
+        <a href="?<?= $tipo_referencia ?>=<?= $id_referencia ?>&action=excepciones" 
            class="btn <?= $action == 'excepciones' ? 'btn-primary' : 'btn-outline' ?>" 
            style="border-radius: 0; border-bottom: none;">
-            ⚠️ Excepciones (Vacaciones/Permisos)
+            ⚠️ Excepciones
         </a>
     </div>
 
@@ -106,7 +157,13 @@ require_once '../../includes/header.php';
         <div class="card" style="margin-bottom: var(--spacing-xl);">
             <h3>➕ Agregar Horario Regular</h3>
             <form method="POST" action="guardar_horario.php" class="form-row" style="align-items: flex-end;">
-                <input type="hidden" name="doctor_id" value="<?= $doctor_id ?>">
+                <?php if ($es_doctor): ?>
+                    <input type="hidden" name="doctor_id" value="<?= $doctor_id ?>">
+                    <input type="hidden" name="tipo" value="doctor">
+                <?php else: ?>
+                    <input type="hidden" name="usuario_id" value="<?= $usuario_id ?>">
+                    <input type="hidden" name="tipo" value="usuario">
+                <?php endif; ?>
                 
                 <div class="form-group">
                     <label>Día</label>
@@ -132,15 +189,11 @@ require_once '../../includes/header.php';
                     <button type="submit" class="btn btn-success">Guardar Horario</button>
                 </div>
             </form>
-        </div>
 
-        <!-- Tabla de horarios regulares -->
-        <div class="card">
-            <h3>📋 Horarios Regulares</h3>
-            
+            <!-- Tabla de horarios -->
             <?php if (empty($horarios)): ?>
                 <div class="alert alert-info" style="text-align: center; padding: var(--spacing-xl);">
-                    <p>No hay horarios configurados para este doctor</p>
+                    <p>No hay horarios configurados para este usuario</p>
                     <p style="margin-top: var(--spacing-sm);">Use el formulario superior para agregar horarios</p>
                 </div>
             <?php else: ?>
@@ -182,10 +235,16 @@ require_once '../../includes/header.php';
         <div class="card" style="margin-bottom: var(--spacing-xl); border-left: 4px solid var(--warning);">
             <h3 style="color: var(--warning);">➕ Agregar Excepción</h3>
             <form method="POST" action="guardar_excepcion.php" class="form-row" style="align-items: flex-end;">
-                <input type="hidden" name="doctor_id" value="<?= $doctor_id ?>">
+                <?php if ($es_doctor): ?>
+                    <input type="hidden" name="doctor_id" value="<?= $doctor_id ?>">
+                    <input type="hidden" name="tipo_persona" value="doctor">
+                <?php else: ?>
+                    <input type="hidden" name="usuario_id" value="<?= $usuario_id ?>">
+                    <input type="hidden" name="tipo_persona" value="usuario">
+                <?php endif; ?>
                 
                 <div class="form-group">
-                    <label>Tipo *</label>
+                    <label>Tipo</label>
                     <select name="tipo" class="form-control" required id="tipoExcepcion">
                         <option value="">Seleccionar...</option>
                         <option value="vacaciones">🏖️ Vacaciones</option>
@@ -197,16 +256,16 @@ require_once '../../includes/header.php';
                 </div>
                 
                 <div class="form-group">
-                    <label>Fecha Inicio *</label>
-                    <input type="date" name="fecha_inicio" class="form-control" required min="<?= date('Y-m-d') ?>">
+                    <label>Fecha Inicio</label>
+                    <input type="date" name="fecha_inicio" class="form-control" required>
                 </div>
                 
                 <div class="form-group">
-                    <label>Fecha Fin *</label>
-                    <input type="date" name="fecha_fin" class="form-control" required min="<?= date('Y-m-d') ?>">
+                    <label>Fecha Fin</label>
+                    <input type="date" name="fecha_fin" class="form-control" required>
                 </div>
                 
-                <!-- Campos para horario especial -->
+                <!-- Campos para horario especial (ocultos por defecto) -->
                 <div class="form-group horario-especial-field" style="display: none;">
                     <label>Hora entrada (especial)</label>
                     <input type="time" name="hora_entrada" class="form-control">
@@ -218,24 +277,20 @@ require_once '../../includes/header.php';
                 </div>
                 
                 <div class="form-group" style="flex: 2;">
-                    <label>Motivo *</label>
+                    <label>Motivo</label>
                     <input type="text" name="motivo" class="form-control" required 
-                           placeholder="Ej: Vacaciones anuales, Permiso personal, Capacitación, etc.">
+                           placeholder="Ej: Vacaciones anuales, Permiso personal, etc.">
                 </div>
                 
                 <div class="form-group">
                     <button type="submit" class="btn btn-warning">Guardar Excepción</button>
                 </div>
             </form>
-        </div>
 
-        <!-- Tabla de excepciones -->
-        <div class="card">
-            <h3>📋 Excepciones Programadas</h3>
-            
+            <!-- Tabla de excepciones -->
             <?php if (empty($excepciones)): ?>
                 <div class="alert alert-info" style="text-align: center; padding: var(--spacing-xl);">
-                    <p>No hay excepciones registradas para este doctor</p>
+                    <p>No hay excepciones registradas para este usuario</p>
                 </div>
             <?php else: ?>
                 <div class="table-container">

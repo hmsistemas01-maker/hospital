@@ -181,9 +181,21 @@ require_once '../../includes/header.php';
                 </button>
                 <a href="usuarios.php" class="btn btn-outline">Cancelar</a>
             </div>
+
+<!-- En la sección de acciones, después de los botones existentes -->
+<div style="margin-top: var(--spacing-lg); display: flex; gap: var(--spacing-sm);">
+    <a href="horarios.php?usuario_id=<?= $usuario['id'] ?>" class="btn btn-outline">
+        ⏰ Gestionar Horarios
+    </a>
+    <a href="horarios.php?usuario_id=<?= $usuario['id'] ?>&action=excepciones" class="btn btn-outline">
+        ⚠️ Excepciones
+    </a>
+</div>            
         </form>
     </div>
 </div>
+
+
 
 <script>
 // Mostrar/ocultar campos de doctor según el rol seleccionado

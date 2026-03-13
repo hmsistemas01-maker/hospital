@@ -4,94 +4,73 @@ $modulo_requerido = 'admin';
 require_once '../../includes/auth.php';
 require_once '../../config/db.php';
 
-// Iniciar sesión si no está iniciada
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+$id = (int) ($_GET['id'] ?? 0);
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    header("Location: usuario_nuevo.php");
+if (!$id) {
+    $_SESSION['error'] = "ID de usuario no válido";
+    header("Location: usuarios.php");
     exit;
 }
 
-// Obtener datos del formulario
-$nombre = trim($_POST['nombre']);
-$usuario = trim($_POST['usuario']);
-$password = $_POST['password'];
-$rol = $_POST['rol'];
-$activo = (int)($_POST['activo'] ?? 1);
-$modulos = $_POST['modulos'] ?? [];
-
-// Validaciones básicas
-if (empty($nombre) || empty($usuario) || empty($password) || empty($rol)) {
-    $_SESSION['error'] = "Todos los campos obligatorios deben ser llenados";
-    header("Location: usuario_nuevo.php");
-    exit;
-}
-
-if (strlen($password) < 6) {
-    $_SESSION['error'] = "La contraseña debe tener al menos 6 caracteres";
-    header("Location: usuario_nuevo.php");
+// Verificar que no sea el propio usuario
+if ($id == $_SESSION['user_id']) {
+    $_SESSION['error'] = "No puedes eliminar tu propio usuario";
+    header("Location: usuarios.php");
     exit;
 }
 
 try {
     $pdo->beginTransaction();
-
-    // Verificar si el usuario ya existe
-    $stmt = $pdo->prepare("SELECT id FROM usuarios WHERE usuario = ?");
-    $stmt->execute([$usuario]);
-    if ($stmt->fetch()) {
-        $_SESSION['error'] = "El nombre de usuario ya está en uso";
-        header("Location: usuario_nuevo.php");
-        $pdo->rollBack();
-        exit;
+    
+    // Obtener información del usuario antes de eliminar
+    $stmt = $pdo->prepare("SELECT nombre, rol FROM usuarios WHERE id = ?");
+    $stmt->execute([$id]);
+    $usuario = $stmt->fetch();
+    
+    if (!$usuario) {
+        throw new Exception("Usuario no encontrado");
     }
-
-    // Hash de la contraseña
-    $password_hash = password_hash($password, PASSWORD_DEFAULT);
-
-    // Insertar usuario
-    $stmt = $pdo->prepare("
-        INSERT INTO usuarios (nombre, usuario, password, rol, activo, fecha_registro) 
-        VALUES (?, ?, ?, ?, ?, NOW())
-    ");
-    $stmt->execute([$nombre, $usuario, $password_hash, $rol, $activo]);
-    $usuario_id = $pdo->lastInsertId();
-
-    // Si el rol es doctor, insertar en la tabla doctores
-    if ($rol === 'doctor') {
-        $especialidad = $_POST['especialidad'] ?? null;
-        $telefono = $_POST['telefono_doctor'] ?? null;
-        $email = $_POST['email_doctor'] ?? null;
+    
+    // 1. Eliminar registros relacionados en usuario_modulos
+    $stmt = $pdo->prepare("DELETE FROM usuario_modulos WHERE usuario_id = ?");
+    $stmt->execute([$id]);
+    
+    // 2. Eliminar registros relacionados en usuario_permisos
+    $stmt = $pdo->prepare("DELETE FROM usuario_permisos WHERE usuario_id = ?");
+    $stmt->execute([$id]);
+    
+    // 3. Si es doctor, eliminar o desvincular de doctores
+    if ($usuario['rol'] == 'doctor') {
+        // Opción 1: Eliminar el doctor también
+        $stmt = $pdo->prepare("DELETE FROM doctores WHERE nombre = ?");
+        $stmt->execute([$usuario['nombre']]);
         
-        $stmt = $pdo->prepare("
-            INSERT INTO doctores (nombre, especialidad, telefono, email, activo, fecha_registro) 
-            VALUES (?, ?, ?, ?, ?, NOW())
-        ");
-        $stmt->execute([$nombre, $especialidad, $telefono, $email, $activo]);
+        // Opción 2: Si prefieres mantener el doctor pero desvincularlo:
+        // $stmt = $pdo->prepare("UPDATE doctores SET activo = 0 WHERE nombre = ?");
+        // $stmt->execute([$usuario['nombre']]);
     }
-
-    // Insertar permisos de módulos
-    if (!empty($modulos)) {
-        $stmt = $pdo->prepare("
-            INSERT INTO usuario_modulos (usuario_id, modulo_id) 
-            VALUES (?, ?)
-        ");
-        foreach ($modulos as $modulo_id) {
-            $stmt->execute([$usuario_id, $modulo_id]);
-        }
-    }
-
+    
+    // 4. Eliminar horarios relacionados (si los tiene)
+    $stmt = $pdo->prepare("DELETE FROM doctor_horarios WHERE usuario_id = ?");
+    $stmt->execute([$id]);
+    
+    // 5. Eliminar excepciones relacionadas
+    $stmt = $pdo->prepare("DELETE FROM doctor_excepciones WHERE usuario_id = ?");
+    $stmt->execute([$id]);
+    
+    // 6. Finalmente, eliminar el usuario
+    $stmt = $pdo->prepare("DELETE FROM usuarios WHERE id = ?");
+    $stmt->execute([$id]);
+    
     $pdo->commit();
-
-    $_SESSION['success'] = "Usuario creado correctamente";
+    
+    $_SESSION['success'] = "Usuario eliminado permanentemente";
     header("Location: usuarios.php");
-    exit;
-
-} catch (PDOException $e) {
+    
+} catch (Exception $e) {
     $pdo->rollBack();
-    $_SESSION['error'] = "Error al crear usuario: " . $e->getMessage();
-    header("Location: usuario_nuevo.php");
-    exit;
+    error_log("Error al eliminar usuario: " . $e->getMessage());
+    $_SESSION['error'] = "Error al eliminar: " . $e->getMessage();
+    header("Location: usuarios.php");
 }
+exit;
